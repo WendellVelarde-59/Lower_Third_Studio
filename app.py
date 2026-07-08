@@ -205,6 +205,18 @@ st.markdown("""
         color: #06b6d4;
         border: 1px solid rgba(6, 182, 212, 0.3);
     }
+
+    .status-badge.warning {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .status-badge.error {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
     
     /* Stats Card */
     .stats-card {
@@ -555,7 +567,7 @@ st.markdown("""
         text-decoration: none;
     }
     
-    /* Toast messages */
+    /* Alert/Error/Success boxes */
     .stSuccess {
         background: rgba(34, 197, 94, 0.15) !important;
         border: 1px solid rgba(34, 197, 94, 0.3) !important;
@@ -568,6 +580,13 @@ st.markdown("""
         border: 1px solid rgba(239, 68, 68, 0.3) !important;
         border-radius: 12px !important;
         color: #ef4444 !important;
+    }
+    
+    .stWarning {
+        background: rgba(245, 158, 11, 0.15) !important;
+        border: 1px solid rgba(245, 158, 11, 0.3) !important;
+        border-radius: 12px !important;
+        color: #f59e0b !important;
     }
     
     .stInfo {
@@ -682,8 +701,8 @@ components.html(
         }
 
         const icons = {
-            open: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path><path d="m16 10-2 2 2 2"></path></svg>`,
-            closed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path><path d="m14 10 2 2-2 2"></path></svg>`
+            open: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 20h10M3 12h18"></path></svg>`,
+            closed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 20h10M3 12h18"></path></svg>`
         };
 
         const positionButton = () => {
@@ -765,6 +784,34 @@ components.html(
     """,
     height=0,
 )
+
+# Error handling helper functions
+def show_error(title: str, message: str, suggestion: str = None):
+    """Display a styled error message with optional suggestion"""
+    st.markdown(f"""
+    <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1rem; margin: 1rem 0;">
+        <div style="color: #ef4444; font-weight: 600; margin-bottom: 0.5rem;">❌ {title}</div>
+        <div style="color: #fca5a5; font-size: 0.95rem; margin-bottom: 0.5rem;">{message}</div>
+        {f'<div style="color: #94a3b8; font-size: 0.85rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(239, 68, 68, 0.2;">💡 <strong>Suggestion:</strong> {suggestion}</div>' if suggestion else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+def show_warning(title: str, message: str):
+    """Display a styled warning message"""
+    st.markdown(f"""
+    <div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 1rem; margin: 1rem 0;">
+        <div style="color: #f59e0b; font-weight: 600; margin-bottom: 0.5rem;">⚠️ {title}</div>
+        <div style="color: #fcd34d; font-size: 0.95rem;">{message}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def show_success(message: str):
+    """Display a styled success message"""
+    st.markdown(f"""
+    <div style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px; padding: 1rem; margin: 1rem 0;">
+        <div style="color: #22c55e; font-weight: 600;">✅ {message}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
@@ -869,7 +916,7 @@ st.markdown("""
 
 st.markdown("""
 <div style="color: #94a3b8; margin-bottom: 1.5rem; font-size: 0.95rem;">
-    Slide your pics in, overlay gon’ stick right away, no setup needed.
+    Slide your pics in, overlay gon' stick right away, no setup needed.
 </div>
 """, unsafe_allow_html=True)
 
@@ -889,7 +936,7 @@ if uploaded_files:
     # Stats row
     num_files = len(uploaded_files)
     st.markdown(f"""
-    <div style="display: flex; justify-content: center; gap: 2rem; margin: 1.5rem 0;">
+    <div style="display: flex; justify-content: center; gap: 2rem; margin: 1.5rem 0; flex-wrap: wrap;">
         <div class="stats-card" style="min-width: 120px;">
             <div class="stats-number">{num_files}</div>
             <div class="stats-label">Images Queued</div>
@@ -913,17 +960,54 @@ if uploaded_files:
     
     progress_bar = st.progress(0)
     status_text = st.empty()
+    error_container = st.container()
+    
+    # Load overlay with improved error handling
+    overlay = None
+    overlay_error = False
     
     try:
         if custom_overlay_file:
-            overlay = Image.open(io.BytesIO(custom_overlay_file.getvalue())).convert("RGBA")
+            try:
+                overlay = Image.open(io.BytesIO(custom_overlay_file.getvalue())).convert("RGBA")
+            except Exception as e:
+                overlay_error = True
+                with error_container:
+                    show_error(
+                        "Invalid Custom Overlay",
+                        f"Failed to load the uploaded PNG: {str(e)}",
+                        "Ensure the file is a valid PNG image. Try re-uploading it."
+                    )
         else:
-            overlay = Image.open("lower_third.png").convert("RGBA")
-    except FileNotFoundError:
-        st.error("⚠️ Overlay file 'lower_third.png' not found. Upload a custom lower third PNG in Settings or add the default overlay image.")
-        st.stop()
-    except Exception:
-        st.error("❌ Cannot open the custom lower third PNG. Please upload a valid PNG file.")
+            try:
+                overlay = Image.open("lower_third.png").convert("RGBA")
+            except FileNotFoundError:
+                overlay_error = True
+                with error_container:
+                    show_error(
+                        "Default Overlay Not Found",
+                        "The default 'lower_third.png' file is missing from the server.",
+                        "Upload a custom PNG overlay in Settings to proceed, or contact support."
+                    )
+            except Exception as e:
+                overlay_error = True
+                with error_container:
+                    show_error(
+                        "Cannot Read Default Overlay",
+                        f"Error reading overlay file: {str(e)}",
+                        "Try uploading a custom PNG overlay in Settings."
+                    )
+    except Exception as e:
+        overlay_error = True
+        with error_container:
+            show_error(
+                "Unexpected Error",
+                f"An unexpected error occurred: {str(e)}",
+                "Please try refreshing the page and try again."
+            )
+    
+    if overlay_error or overlay is None:
+        st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
     
     zip_buffer = io.BytesIO()
@@ -931,6 +1015,8 @@ if uploaded_files:
     
     processed_images = []
     successful_count = 0
+    failed_count = 0
+    failed_files = []
     
     for idx, file in enumerate(uploaded_files):
         progress = (idx + 1) / num_files
@@ -942,31 +1028,84 @@ if uploaded_files:
         """, unsafe_allow_html=True)
         
         try:
+            # Try to open and validate the image
             base = Image.open(io.BytesIO(file.read())).convert("RGBA")
-        except Exception:
-            st.error(f"❌ Cannot open: {file.name}")
+            
+            # Validate image dimensions
+            if base.width == 0 or base.height == 0:
+                raise ValueError("Image has invalid dimensions (0x0)")
+            
+            if base.width > 8000 or base.height > 8000:
+                show_warning(
+                    f"Large Image: {file.name}",
+                    "This image is very large and might take longer to process."
+                )
+        except Image.UnidentifiedImageError:
+            failed_count += 1
+            failed_files.append(file.name)
+            with error_container:
+                show_error(
+                    f"Cannot Open: {file.name}",
+                    "This file is not a valid image format or is corrupted.",
+                    "Try re-exporting the image from your editor."
+                )
+            continue
+        except ValueError as e:
+            failed_count += 1
+            failed_files.append(file.name)
+            with error_container:
+                show_error(
+                    f"Invalid Image: {file.name}",
+                    str(e),
+                    "The image file appears to be corrupted. Try using a different file."
+                )
+            continue
+        except Exception as e:
+            failed_count += 1
+            failed_files.append(file.name)
+            with error_container:
+                show_error(
+                    f"Error Processing: {file.name}",
+                    f"Unexpected error: {str(e)}",
+                    "Try processing this file separately."
+                )
             continue
         
-        scale = base.width / overlay.width
-        overlay_resized = overlay.resize(
-            (base.width, int(overlay.height * scale))
-        )
-        
-        position = (0, base.height - overlay_resized.height)
-        
-        result = base.copy()
-        result.paste(overlay_resized, position, overlay_resized)
-        
-        img_buffer = io.BytesIO()
-        result.convert("RGB").save(img_buffer, format="JPEG", quality=output_quality)
-        
-        zip_file.writestr(
-            f"lowerthird_{file.name}.jpg",
-            img_buffer.getvalue()
-        )
-        
-        processed_images.append((result, file.name))
-        successful_count += 1
+        try:
+            # Process the image
+            scale = base.width / overlay.width
+            overlay_resized = overlay.resize(
+                (base.width, int(overlay.height * scale))
+            )
+            
+            position = (0, base.height - overlay_resized.height)
+            
+            result = base.copy()
+            result.paste(overlay_resized, position, overlay_resized)
+            
+            # Save to buffer with error handling
+            img_buffer = io.BytesIO()
+            result.convert("RGB").save(img_buffer, format="JPEG", quality=output_quality)
+            
+            # Add to ZIP
+            zip_file.writestr(
+                f"lowerthird_{file.name}.jpg",
+                img_buffer.getvalue()
+            )
+            
+            processed_images.append((result, file.name))
+            successful_count += 1
+            
+        except Exception as e:
+            failed_count += 1
+            failed_files.append(file.name)
+            with error_container:
+                show_error(
+                    f"Export Error: {file.name}",
+                    f"Failed to save processed image: {str(e)}",
+                    "This might be a memory issue. Try processing fewer files at once."
+                )
+            continue
         
         time.sleep(0.1)  # Smooth animation
     
@@ -974,11 +1113,20 @@ if uploaded_files:
     
     st.session_state.processed_count = successful_count
     
-    status_text.markdown(f"""
-    <div class="status-badge success" style="display: inline-flex;">
-        ✅ Successfully processed {successful_count} images
-    </div>
-    """, unsafe_allow_html=True)
+    # Summary status
+    if successful_count > 0:
+        status_text.markdown(f"""
+        <div class="status-badge success" style="display: inline-flex;">
+            ✅ Successfully processed {successful_count}/{num_files} images
+        </div>
+        """, unsafe_allow_html=True)
+    
+    if failed_count > 0:
+        with error_container:
+            show_warning(
+                f"⚠️ {failed_count} File(s) Failed",
+                f"Failed files: {', '.join(failed_files[:3])}{'...' if len(failed_files) > 3 else ''}"
+            )
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -1003,32 +1151,33 @@ if uploaded_files:
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Download section
-    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.markdown("""
-    <div class="section-title">📥 Export</div>
-    <div style="color: #94a3b8; margin-bottom: 1.5rem;">
-        Your images are ready! Download the complete package below.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.download_button(
-            label="⬇️  Download ZIP Package",
-            data=zip_buffer.getvalue(),
-            file_name="lowerthird_outputs.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
-    
-    st.markdown(f"""
-    <div style="text-align: center; margin-top: 1rem; color: #64748b; font-size: 0.85rem;">
-        📦 Package contains {successful_count} processed images at {output_quality}% quality
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    if successful_count > 0:
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="section-title">📥 Export</div>
+        <div style="color: #94a3b8; margin-bottom: 1.5rem;">
+            Your images are ready! Download the complete package below.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.download_button(
+                label="⬇️  Download ZIP Package",
+                data=zip_buffer.getvalue(),
+                file_name="lowerthird_outputs.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin-top: 1rem; color: #64748b; font-size: 0.85rem;">
+            📦 Package contains {successful_count} processed images at {output_quality}% quality
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 else:
     # Empty state
